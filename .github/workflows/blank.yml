@@ -1,36 +1,58 @@
-# This is a basic workflow to help you get started with Actions
-
 name: CI
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        # 如需交叉编译 / 多架构构建，追加更多目标即可
+        target: [x86_64]
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      # 0️⃣ 检出你自己的仓库（可选：如果只构建 protobuf，也可省略）
       - uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      # 1️⃣ 安装系统依赖
+      - name: Install build dependencies
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build zip curl perl pkg-config libclang-dev musl-tools git
+
+      # 2️⃣ 下载并解压 protobuf-31.1
+      - name: Download protobuf source
+        run: |
+          curl -L -o protobuf.tar.gz https://github.com/protocolbuffers/protobuf/releases/download/v31.1/protobuf-31.1.tar.gz
+          tar -xzf protobuf.tar.gz
+
+      # 3️⃣ 配置 + 构建 + 安装
+      - name: Configure & build protobuf
+        working-directory: ./protobuf-31.1
+        run: |
+          mkdir -p build /home/protobuf
+          cd build
+          cmake .. \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_INSTALL_PREFIX=/home/protobuf
+          cmake --build .
+          cmake --install .
+
+      # 4️⃣ 打包 /home/protobuf
+      - name: Package install directory
+        run: |
+          cd /home
+          zip -r build-linux-${{ matrix.target }}.zip protobuf
+
+      # 5️⃣ 上传产物
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-${{ matrix.target }}
+          path: /home/build-linux-${{ matrix.target }}.zip
+          retention-days: 1
