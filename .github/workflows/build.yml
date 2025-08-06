@@ -12,14 +12,13 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        # 如需交叉编译 / 多架构构建，追加更多目标即可
         target: [x86_64]
 
     steps:
-      # 0️⃣ 检出你自己的仓库（可选：如果只构建 protobuf，也可省略）
+      # 0️⃣ 检出仓库（若只编译 protobuf 可省略，但通常保留）
       - uses: actions/checkout@v4
 
-      # 1️⃣ 安装系统依赖
+      # 1️⃣ 安装依赖
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -31,28 +30,28 @@ jobs:
           curl -L -o protobuf.tar.gz https://github.com/protocolbuffers/protobuf/releases/download/v31.1/protobuf-31.1.tar.gz
           tar -xzf protobuf.tar.gz
 
-      # 3️⃣ 配置 + 构建 + 安装
+      # 3️⃣ 配置、构建、安装
       - name: Configure & build protobuf
         working-directory: ./protobuf-31.1
         run: |
-          mkdir -p build /home/protobuf
+          mkdir -p build "${GITHUB_WORKSPACE}/install"
           cd build
           cmake .. \
             -DCMAKE_CXX_STANDARD=20 \
-            -DCMAKE_INSTALL_PREFIX=/home/protobuf
+            -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/install"
           cmake --build .
           cmake --install .
 
-      # 4️⃣ 打包 /home/protobuf
+      # 4️⃣ 打包 install 目录
       - name: Package install directory
+        working-directory: ${{ github.workspace }}
         run: |
-          cd /home
-          zip -r build-linux-${{ matrix.target }}.zip protobuf
+          zip -r build-linux-${{ matrix.target }}.zip install
 
       # 5️⃣ 上传产物
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: build-linux-${{ matrix.target }}
-          path: /home/build-linux-${{ matrix.target }}.zip
+          path: build-linux-${{ matrix.target }}.zip
           retention-days: 1
